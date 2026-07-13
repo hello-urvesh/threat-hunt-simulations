@@ -1,0 +1,22 @@
+title: AMSIEnable Registry Value Modified
+id: d862e534-fb18-4470-a362-e6a9e278e30a
+status: experimental
+description: Detects changes to the current user Windows Script AmsiEnable registry value.
+references:
+  - https://github.com/redcanaryco/atomic-red-team
+author: Threat Hunt Simulations
+date: 2026-07-13
+tags:
+  - attack.defense-evasion
+  - attack.t1685
+logsource:
+  category: registry_set
+  product: windows
+detection:
+  selection:
+    TargetObject|endswith: '\Software\Microsoft\Windows Script\Settings\AmsiEnable'
+  condition: selection
+falsepositives:
+  - Authorized security testing
+  - Legacy script engine troubleshooting
+level: high
