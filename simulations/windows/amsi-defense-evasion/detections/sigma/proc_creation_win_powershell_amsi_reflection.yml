@@ -1,0 +1,43 @@
+title: PowerShell AMSI Internal Reflection
+id: 8cbec3f1-882e-4fbb-9e96-b746f4207ce2
+status: experimental
+description: Detects PowerShell command lines that reference internal AMSI types or fields commonly used for AMSI bypass attempts.
+references:
+  - https://github.com/redcanaryco/atomic-red-team
+author: Threat Hunt Simulations
+date: 2026-07-13
+tags:
+  - attack.defense-evasion
+  - attack.t1685
+logsource:
+  category: process_creation
+  product: windows
+detection:
+  selection_image:
+    Image|endswith:
+      - '\powershell.exe'
+      - '\pwsh.exe'
+    OriginalFileName:
+      - 'PowerShell.EXE'
+      - 'pwsh.dll'
+  selection_type:
+    CommandLine|contains:
+      - 'AmsiUtils'
+      - 'System.Management.Automation'
+  selection_field:
+    CommandLine|contains:
+      - 'amsiInitFailed'
+      - 'AmsiScanBuffer'
+  selection_reflection:
+    CommandLine|contains:
+      - 'GetField'
+      - 'NonPublic,Static'
+      - 'SetValue'
+      - 'GetProcAddress'
+      - 'VirtualProtect'
+  condition: selection_image and (selection_field or (selection_type and selection_reflection))
+falsepositives:
+  - Security research
+  - Authorized red team activity
+  - Endpoint security validation
+level: high
