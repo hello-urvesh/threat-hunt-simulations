@@ -1,0 +1,174 @@
+attack_technique: T1553.005
+display_name: 'Subvert Trust Controls: Mark-of-the-Web Bypass'
+atomic_tests:
+- name: Create MOTW baseline with direct IP origin metadata
+  auto_generated_guid: 56fb4ab0-27bf-49b7-9593-4769099c8544
+  description: |
+    Creates a harmless file and a genuine Zone.Identifier alternate data stream.
+    HostUrl contains a reserved documentation IP so defenders can validate direct IP MOTW hunts.
+    This is a telemetry baseline and does not bypass MOTW.
+  supported_platforms:
+  - windows
+  input_arguments:
+    file_path:
+      description: File that receives the MOTW stream.
+      type: path
+      default: '%TEMP%\motw-lab\direct-ip\security_update.js'
+    host_url:
+      description: Controlled HostUrl stored in the MOTW stream.
+      type: string
+      default: http://203.0.113.10/files/security_update.js
+    referrer_url:
+      description: Controlled ReferrerUrl stored in the MOTW stream.
+      type: string
+      default: http://203.0.113.10/landing/index.html
+  dependency_executor_name: powershell
+  dependencies:
+  - description: The target volume must support NTFS alternate data streams.
+    prereq_command: |
+      $root = [System.IO.Path]::GetPathRoot([Environment]::ExpandEnvironmentVariables('#{file_path}'))
+      $drive = Get-Volume -DriveLetter $root.Substring(0,1) -ErrorAction SilentlyContinue
+      if ($drive.FileSystem -eq 'NTFS') { exit 0 } else { exit 1 }
+    get_prereq_command: |
+      Write-Error 'Use an NTFS path for this test.'
+  executor:
+    command: |
+      $path = [Environment]::ExpandEnvironmentVariables('#{file_path}')
+      New-Item -ItemType Directory -Path (Split-Path -Parent $path) -Force | Out-Null
+      Set-Content -LiteralPath $path -Value 'MOTW direct IP telemetry marker. This file is harmless.' -Encoding UTF8
+      $zone = @('[ZoneTransfer]','ZoneId=3','ReferrerUrl=#{referrer_url}','HostUrl=#{host_url}') -join [Environment]::NewLine
+      Set-Content -LiteralPath $path -Stream Zone.Identifier -Value $zone -Encoding ASCII
+      Get-Content -LiteralPath $path -Stream Zone.Identifier
+    cleanup_command: |
+      $path = [Environment]::ExpandEnvironmentVariables('#{file_path}')
+      Remove-Item -LiteralPath $path -Force -ErrorAction SilentlyContinue
+    name: powershell
+    elevation_required: false
+
+- name: Remove the Zone.Identifier alternate data stream
+  auto_generated_guid: 64b12afc-18b8-4d3f-9eab-7f6cae7c73f9
+  description: |
+    Upstream Atomic Red Team test adapted for this pack.
+    Removes the Zone.Identifier alternate data stream using Unblock-File.
+  supported_platforms:
+  - windows
+  input_arguments:
+    file_to_download:
+      description: Safe source file used by the prerequisite.
+      type: url
+      default: https://raw.githubusercontent.com/redcanaryco/atomic-red-team/master/README.md
+    file_path:
+      description: File whose Zone.Identifier stream is removed.
+      type: path
+      default: '%TEMP%\motw-lab\unblock\ReadMe.md'
+  dependency_executor_name: powershell
+  dependencies:
+  - description: A safe test file with a Zone.Identifier stream must be present.
+    prereq_command: |
+      $path = [Environment]::ExpandEnvironmentVariables('#{file_path}')
+      if ((Test-Path -LiteralPath $path) -and (Get-Item -LiteralPath $path -Stream Zone.Identifier -ErrorAction SilentlyContinue)) { exit 0 } else { exit 1 }
+    get_prereq_command: |
+      $path = [Environment]::ExpandEnvironmentVariables('#{file_path}')
+      New-Item -ItemType Directory -Path (Split-Path -Parent $path) -Force | Out-Null
+      try {
+        Invoke-WebRequest '#{file_to_download}' -OutFile $path -UseBasicParsing
+      } catch {
+        Set-Content -LiteralPath $path -Value 'Offline MOTW Unblock-File marker.' -Encoding UTF8
+      }
+      $zone = @('[ZoneTransfer]','ZoneId=3','ReferrerUrl=https://github.com/redcanaryco/atomic-red-team','HostUrl=#{file_to_download}') -join [Environment]::NewLine
+      Set-Content -LiteralPath $path -Stream Zone.Identifier -Value $zone -Encoding ASCII
+  executor:
+    command: |
+      $path = [Environment]::ExpandEnvironmentVariables('#{file_path}')
+      Unblock-File -LiteralPath $path
+      if (Get-Item -LiteralPath $path -Stream Zone.Identifier -ErrorAction SilentlyContinue) {
+        throw 'Zone.Identifier still exists after Unblock-File.'
+      }
+    cleanup_command: |
+      $path = [Environment]::ExpandEnvironmentVariables('#{file_path}')
+      if (Test-Path -LiteralPath $path) {
+        $zone = @('[ZoneTransfer]','ZoneId=3','ReferrerUrl=https://github.com/redcanaryco/atomic-red-team','HostUrl=#{file_to_download}') -join [Environment]::NewLine
+        Set-Content -LiteralPath $path -Stream Zone.Identifier -Value $zone -Encoding ASCII
+      }
+    name: powershell
+    elevation_required: false
+
+- name: Downgrade MOTW ZoneId from Internet to Local Machine
+  auto_generated_guid: 89256a09-803b-4e30-a209-f0ad94bace0d
+  description: |
+    Creates a harmless marked file and changes ZoneId from 3 to 0.
+    Cleanup restores ZoneId 3.
+  supported_platforms:
+  - windows
+  input_arguments:
+    file_path:
+      description: Marked file used by the simulation.
+      type: path
+      default: '%TEMP%\motw-lab\zone-downgrade\invoice.docx.js'
+    host_url:
+      description: Controlled source URL.
+      type: string
+      default: https://delivery-check.xyz/files/invoice.docx.js
+  executor:
+    command: |
+      $path = [Environment]::ExpandEnvironmentVariables('#{file_path}')
+      New-Item -ItemType Directory -Path (Split-Path -Parent $path) -Force | Out-Null
+      Set-Content -LiteralPath $path -Value 'MOTW ZoneId downgrade marker. This file is harmless.' -Encoding UTF8
+      $original = @('[ZoneTransfer]','ZoneId=3','ReferrerUrl=https://delivery-check.xyz/landing','HostUrl=#{host_url}') -join [Environment]::NewLine
+      Set-Content -LiteralPath $path -Stream Zone.Identifier -Value $original -Encoding ASCII
+      $modified = $original -replace 'ZoneId=3','ZoneId=0'
+      Set-Content -LiteralPath $path -Stream Zone.Identifier -Value $modified -Encoding ASCII
+      Get-Content -LiteralPath $path -Stream Zone.Identifier
+    cleanup_command: |
+      $path = [Environment]::ExpandEnvironmentVariables('#{file_path}')
+      if (Test-Path -LiteralPath $path) {
+        $restored = @('[ZoneTransfer]','ZoneId=3','ReferrerUrl=https://delivery-check.xyz/landing','HostUrl=#{host_url}') -join [Environment]::NewLine
+        Set-Content -LiteralPath $path -Stream Zone.Identifier -Value $restored -Encoding ASCII
+      }
+    name: powershell
+    elevation_required: false
+
+- name: Marked ZIP extraction creates child without inherited MOTW
+  auto_generated_guid: 925e447a-83ad-42f8-944b-3a66c9da2f2e
+  description: |
+    Creates a harmless command marker inside a ZIP archive, applies MOTW to the ZIP, extracts it,
+    and records whether the extracted child inherited Zone.Identifier.
+  supported_platforms:
+  - windows
+  input_arguments:
+    working_directory:
+      description: Working directory for the marked ZIP and extracted child.
+      type: path
+      default: '%TEMP%\motw-lab\container'
+  dependency_executor_name: powershell
+  dependencies:
+  - description: Compress-Archive and Expand-Archive must be available.
+    prereq_command: |
+      if ((Get-Command Compress-Archive -ErrorAction SilentlyContinue) -and (Get-Command Expand-Archive -ErrorAction SilentlyContinue)) { exit 0 } else { exit 1 }
+    get_prereq_command: |
+      Write-Error 'PowerShell archive cmdlets are required.'
+  executor:
+    command: |
+      $root = [Environment]::ExpandEnvironmentVariables('#{working_directory}')
+      $source = Join-Path $root 'source'
+      $extract = Join-Path $root 'extracted'
+      $zip = Join-Path $root 'Quarterly_Reports.zip'
+      New-Item -ItemType Directory -Path $source,$extract -Force | Out-Null
+      $child = Join-Path $source 'Quarterly_Report.pdf.cmd'
+      Set-Content -LiteralPath $child -Value '@echo MOTW_CONTAINER_SAFE_MARKER' -Encoding ASCII
+      Compress-Archive -Path $child -DestinationPath $zip -Force
+      $zone = @('[ZoneTransfer]','ZoneId=3','ReferrerUrl=https://files.example.test/share','HostUrl=https://cdn.example.test/Quarterly_Reports.zip') -join [Environment]::NewLine
+      Set-Content -LiteralPath $zip -Stream Zone.Identifier -Value $zone -Encoding ASCII
+      Expand-Archive -LiteralPath $zip -DestinationPath $extract -Force
+      $extractedChild = Join-Path $extract 'Quarterly_Report.pdf.cmd'
+      [pscustomobject]@{
+        ZipPath = $zip
+        ZipMarked = [bool](Get-Item -LiteralPath $zip -Stream Zone.Identifier -ErrorAction SilentlyContinue)
+        ExtractedChild = $extractedChild
+        ExtractedChildMarked = [bool](Get-Item -LiteralPath $extractedChild -Stream Zone.Identifier -ErrorAction SilentlyContinue)
+      } | ConvertTo-Json -Compress
+    cleanup_command: |
+      $root = [Environment]::ExpandEnvironmentVariables('#{working_directory}')
+      Remove-Item -LiteralPath $root -Recurse -Force -ErrorAction SilentlyContinue
+    name: powershell
+    elevation_required: false

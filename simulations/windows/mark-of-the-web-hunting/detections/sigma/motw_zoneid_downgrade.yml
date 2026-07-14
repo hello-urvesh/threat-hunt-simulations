@@ -1,0 +1,22 @@
+title: Mark of the Web Zone Identifier Set to a Trusted Zone
+id: e9170d61-cea0-4c35-ae0d-98085706542e
+status: experimental
+description: Detects creation or modification of a Zone.Identifier stream whose ZoneId is set to a zone lower than Internet.
+references:
+    - https://attack.mitre.org/techniques/T1553/005/
+author: ThreatHuntSim
+date: 2026-07-14
+tags:
+    - attack.defense-evasion
+    - attack.t1553.005
+logsource:
+    product: windows
+    category: create_stream_hash
+detection:
+    selection:
+        TargetFilename|endswith: ':Zone.Identifier'
+        Contents|re: '(?im)^ZoneId=(?:0|1|2)\s*$'
+    condition: selection
+falsepositives:
+    - Legitimate intranet, trusted zone, or local machine files
+level: low

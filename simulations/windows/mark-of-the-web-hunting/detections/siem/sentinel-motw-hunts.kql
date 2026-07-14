@@ -1,0 +1,29 @@
+// Base parser for Sysmon Event ID 15 in the WindowsEvent table
+let MotwEvents = WindowsEvent
+| where Provider == "Microsoft-Windows-Sysmon" and EventID == 15
+| extend TargetFilename = tostring(EventData.TargetFilename),
+         Image = tostring(EventData.Image),
+         Contents = tostring(EventData.Contents),
+         ProcessGuid = tostring(EventData.ProcessGuid)
+| where TargetFilename endswith ":Zone.Identifier"
+| extend MotwZoneId = toint(extract(@"(?im)^ZoneId=(\d+)\s*$", 1, Contents)),
+         MotwHostUrl = extract(@"(?im)^HostUrl=(.+?)\s*$", 1, Contents),
+         MotwReferrerUrl = extract(@"(?im)^ReferrerUrl=(.+?)\s*$", 1, Contents)
+| extend MotwHost = tostring(parse_url(MotwHostUrl).Host);
+MotwEvents
+| project TimeGenerated, Computer, Image, TargetFilename, MotwZoneId, MotwHost, MotwHostUrl, MotwReferrerUrl, Contents
+
+// Direct IP HostUrl
+MotwEvents
+| where ipv4_is_private(MotwHost) == false and isnotempty(parse_ipv4(MotwHost))
+| summarize Count=count(), Files=make_set(TargetFilename), Images=make_set(Image) by Computer, MotwHost, MotwHostUrl
+
+// Double extension
+MotwEvents
+| where TargetFilename matches regex @"(?i)\.(pdf|docx?|xlsx?|pptx?|rtf|txt|jpg|jpeg|png|gif)\.(exe|dll|scr|cmd|bat|ps1|js|jse|vbs|vbe|wsf|hta|lnk|msi):Zone\.Identifier$"
+| project TimeGenerated, Computer, Image, TargetFilename, MotwHostUrl, MotwReferrerUrl
+
+// ZoneId downgrade or trusted zone assignment
+MotwEvents
+| where MotwZoneId in (0, 1, 2)
+| project TimeGenerated, Computer, Image, TargetFilename, MotwZoneId, Contents

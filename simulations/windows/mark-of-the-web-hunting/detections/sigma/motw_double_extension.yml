@@ -1,0 +1,22 @@
+title: Marked File With a Suspicious Double Extension
+id: 89a917ec-3eb5-40d0-827b-c322909e8cdb
+status: test
+description: Detects a Zone.Identifier stream attached to a filename that combines a document or image extension with a script or executable extension.
+references:
+    - https://www.paloaltonetworks.com/blog/security-operations/threat-hunting-with-mark-of-the-web-using-cortex-xdr/
+author: ThreatHuntSim
+date: 2026-07-14
+tags:
+    - attack.defense-evasion
+    - attack.t1036.007
+logsource:
+    product: windows
+    category: create_stream_hash
+detection:
+    selection:
+        TargetFilename|re: '(?i)\.(?:pdf|docx?|xlsx?|pptx?|rtf|txt|jpg|jpeg|png|gif)\.(?:exe|dll|scr|cmd|bat|ps1|js|jse|vbs|vbe|wsf|hta|lnk|msi):Zone\.Identifier$'
+        Contents|contains: 'ZoneId=3'
+    condition: selection
+falsepositives:
+    - Administrative test files or intentionally named samples
+level: high

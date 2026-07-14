@@ -1,0 +1,23 @@
+title: Mark of the Web Metadata References an External UNC Origin
+id: e336c589-3701-4383-9a12-e6856816a085
+status: experimental
+description: Detects a Zone.Identifier stream that contains a UNC or file URL origin using an IP literal.
+references:
+    - https://www.paloaltonetworks.com/blog/security-operations/threat-hunting-with-mark-of-the-web-using-cortex-xdr/
+author: ThreatHuntSim
+date: 2026-07-14
+tags:
+    - attack.command-and-control
+    - attack.t1105
+logsource:
+    product: windows
+    category: create_stream_hash
+detection:
+    selection_stream:
+        TargetFilename|endswith: ':Zone.Identifier'
+    selection_origin:
+        Contents|re: '(?i)(?:ReferrerUrl|HostUrl)=(?:file:)?\\\\(?:\d{1,3}\.){3}\d{1,3}\\'
+    condition: selection_stream and selection_origin
+falsepositives:
+    - Approved file servers represented by IP address
+level: medium

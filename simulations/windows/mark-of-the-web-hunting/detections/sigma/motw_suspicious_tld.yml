@@ -1,0 +1,22 @@
+title: Mark of the Web HostUrl Uses a Monitored TLD
+id: 77570170-2dd5-4e4e-a48d-580937ace80d
+status: experimental
+description: Detects MOTW HostUrl values ending in a configurable list of uncommon or frequently abused top level domains.
+references:
+    - https://www.paloaltonetworks.com/blog/security-operations/threat-hunting-with-mark-of-the-web-using-cortex-xdr/
+author: ThreatHuntSim
+date: 2026-07-14
+tags:
+    - attack.command-and-control
+    - attack.t1105
+logsource:
+    product: windows
+    category: create_stream_hash
+detection:
+    selection:
+        TargetFilename|endswith: ':Zone.Identifier'
+        Contents|re: '(?i)HostUrl=https?://[^/\r\n]+\.(?:xyz|top|click|zip|mov|cam|work|support)(?::\d+)?(?:/|$)'
+    condition: selection
+falsepositives:
+    - Legitimate business use of a monitored TLD
+level: low

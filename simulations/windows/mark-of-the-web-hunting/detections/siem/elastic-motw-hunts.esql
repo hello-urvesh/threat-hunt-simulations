@@ -1,0 +1,16 @@
+// Base MOTW Event ID 15 search
+FROM logs-windows.sysmon_operational-*
+| WHERE winlog.event_id == 15 AND winlog.event_data.TargetFilename LIKE "*:Zone.Identifier"
+| KEEP @timestamp, host.name, user.name, process.executable, winlog.event_data.TargetFilename, winlog.event_data.Contents
+
+// Direct IP search after ingest pipeline normalization
+FROM logs-windows.sysmon_operational-*
+| WHERE winlog.event_id == 15 AND motw.host_is_ip == true
+| WHERE NOT CIDR_MATCH(motw.host, "10.0.0.0/8", "127.0.0.0/8", "169.254.0.0/16", "172.16.0.0/12", "192.168.0.0/16")
+| STATS count = COUNT(*) BY host.name, motw.host, motw.host_url
+
+// Double extension
+FROM logs-windows.sysmon_operational-*
+| WHERE winlog.event_id == 15
+| WHERE winlog.event_data.TargetFilename RLIKE "(?i)\\.(pdf|docx?|xlsx?|pptx?|rtf|txt|jpg|jpeg|png|gif)\\.(exe|dll|scr|cmd|bat|ps1|js|jse|vbs|vbe|wsf|hta|lnk|msi):Zone\\.Identifier$"
+| KEEP @timestamp, host.name, process.executable, winlog.event_data.TargetFilename, motw.host_url

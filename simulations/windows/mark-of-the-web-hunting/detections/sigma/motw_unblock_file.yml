@@ -1,0 +1,26 @@
+title: PowerShell Unblock File Removes Mark of the Web
+id: 87f3d60e-b310-467c-8d72-3e245ab41c24
+status: test
+description: Detects PowerShell use of Unblock-File, which removes the Zone.Identifier alternate data stream.
+references:
+    - https://github.com/redcanaryco/atomic-red-team/tree/master/atomics/T1553.005
+author: ThreatHuntSim
+date: 2026-07-14
+tags:
+    - attack.defense-evasion
+    - attack.t1553.005
+logsource:
+    product: windows
+    category: ps_script
+definition: Script Block Logging must be enabled.
+detection:
+    selection:
+        ScriptBlockText|contains|all:
+            - 'Unblock-File'
+            - '-LiteralPath'
+    selection_path:
+        ScriptBlockText|contains: ':Zone.Identifier'
+    condition: selection or selection_path
+falsepositives:
+    - Legitimate administrative scripts and trusted software deployment workflows
+level: medium
