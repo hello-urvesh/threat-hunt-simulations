@@ -56,6 +56,8 @@ Collect endpoint events:
 
 ## Atomic Red Team usage
 
+Use a custom atomics path or merge the `atomic_tests` arrays into an existing Atomic Red Team installation. Do not overwrite upstream technique YAML without reviewing and merging its existing tests.
+
 ```powershell
 Invoke-AtomicTest T1553.005 -ShowDetails
 Invoke-AtomicTest T1553.005 -CheckPrereqs

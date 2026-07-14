@@ -49,8 +49,16 @@ if ($PathContains) {
         ($_.PSObject.Properties.Name -contains 'CommandLine' -and $_.CommandLine -like "*$PathContains*") -or
         ($_.PSObject.Properties.Name -contains 'ParentCommandLine' -and $_.ParentCommandLine -like "*$PathContains*")
     })
-    $powershell = @($powershell | Where-Object { ($_ | ConvertTo-Json -Compress) -like "*$PathContains*" })
-    $security = @($security | Where-Object { ($_ | ConvertTo-Json -Compress) -like "*$PathContains*" })
+    $powershell = @($powershell | Where-Object {
+        ($_.PSObject.Properties.Name -contains 'ScriptBlockText' -and $_.ScriptBlockText -like "*$PathContains*") -or
+        ($_.PSObject.Properties.Name -contains 'Path' -and $_.Path -like "*$PathContains*") -or
+        ($_.PSObject.Properties.Name -contains 'Payload' -and $_.Payload -like "*$PathContains*")
+    })
+    $security = @($security | Where-Object {
+        ($_.PSObject.Properties.Name -contains 'CommandLine' -and $_.CommandLine -like "*$PathContains*") -or
+        ($_.PSObject.Properties.Name -contains 'NewProcessName' -and $_.NewProcessName -like "*$PathContains*") -or
+        ($_.PSObject.Properties.Name -contains 'ParentProcessName' -and $_.ParentProcessName -like "*$PathContains*")
+    })
 }
 
 $rawPath = Join-Path $OutputDirectory 'motw-events-raw.json'
