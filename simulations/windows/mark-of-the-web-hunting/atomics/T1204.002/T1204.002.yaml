@@ -1,0 +1,46 @@
+attack_technique: T1204.002
+display_name: 'User Execution: Malicious File'
+atomic_tests:
+- name: Execute a harmless marked double extension command file
+  auto_generated_guid: 1ab17403-6b0b-4807-bbfd-0e137e25fc00
+  description: |
+    Executes a harmless .cmd file with a double extension and a Zone.Identifier stream.
+    The file only writes a local marker. This produces process creation telemetry that can be
+    correlated with the earlier Sysmon Event ID 15 for the same path.
+  supported_platforms:
+  - windows
+  input_arguments:
+    file_path:
+      description: Marked command file to execute.
+      type: path
+      default: '%TEMP%\motw-lab\execution\Invoice_2026.pdf.cmd'
+    marker_path:
+      description: Marker file written by the command.
+      type: path
+      default: '%TEMP%\motw-lab\execution\execution-marker.txt'
+  dependency_executor_name: powershell
+  dependencies:
+  - description: A harmless marked double extension command file must exist.
+    prereq_command: |
+      $path = [Environment]::ExpandEnvironmentVariables('#{file_path}')
+      if ((Test-Path -LiteralPath $path) -and (Get-Item -LiteralPath $path -Stream Zone.Identifier -ErrorAction SilentlyContinue)) { exit 0 } else { exit 1 }
+    get_prereq_command: |
+      $path = [Environment]::ExpandEnvironmentVariables('#{file_path}')
+      $marker = [Environment]::ExpandEnvironmentVariables('#{marker_path}')
+      New-Item -ItemType Directory -Path (Split-Path -Parent $path) -Force | Out-Null
+      $command = '@echo MOTW_EXECUTION_SAFE_MARKER>' + '"' + $marker + '"'
+      Set-Content -LiteralPath $path -Value $command -Encoding ASCII
+      $zone = @('[ZoneTransfer]','ZoneId=3','ReferrerUrl=https://portal.example.test/invoices','HostUrl=https://delivery-check.xyz/Invoice_2026.pdf.cmd') -join [Environment]::NewLine
+      Set-Content -LiteralPath $path -Stream Zone.Identifier -Value $zone -Encoding ASCII
+  executor:
+    command: |
+      $path = [Environment]::ExpandEnvironmentVariables('#{file_path}')
+      $marker = [Environment]::ExpandEnvironmentVariables('#{marker_path}')
+      & $env:ComSpec /d /c ('"{0}"' -f $path)
+      if (-not (Test-Path -LiteralPath $marker)) { throw 'Expected safe marker was not created.' }
+    cleanup_command: |
+      $path = [Environment]::ExpandEnvironmentVariables('#{file_path}')
+      $marker = [Environment]::ExpandEnvironmentVariables('#{marker_path}')
+      Remove-Item -LiteralPath $path,$marker -Force -ErrorAction SilentlyContinue
+    name: powershell
+    elevation_required: false

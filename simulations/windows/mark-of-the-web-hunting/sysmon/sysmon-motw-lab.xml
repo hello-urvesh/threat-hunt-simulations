@@ -1,0 +1,28 @@
+<Sysmon schemaversion="4.82">
+  <HashAlgorithms>SHA256</HashAlgorithms>
+  <CheckRevocation>true</CheckRevocation>
+  <EventFiltering>
+    <ProcessCreate onmatch="include">
+      <Image condition="end with">\powershell.exe</Image>
+      <Image condition="end with">\pwsh.exe</Image>
+      <Image condition="end with">\cmd.exe</Image>
+      <Image condition="end with">\cscript.exe</Image>
+      <Image condition="end with">\wscript.exe</Image>
+      <Image condition="end with">\mshta.exe</Image>
+      <Image condition="end with">\explorer.exe</Image>
+      <Image condition="end with">\7z.exe</Image>
+      <Image condition="end with">\tar.exe</Image>
+    </ProcessCreate>
+    <FileCreate onmatch="include">
+      <TargetFilename condition="contains">\MOTW-Lab\</TargetFilename>
+      <TargetFilename condition="contains">\Downloads\</TargetFilename>
+    </FileCreate>
+    <FileCreateStreamHash onmatch="include">
+      <TargetFilename condition="end with">:Zone.Identifier</TargetFilename>
+    </FileCreateStreamHash>
+    <FileDeleteDetected onmatch="include">
+      <TargetFilename condition="contains">\MOTW-Lab\</TargetFilename>
+      <TargetFilename condition="end with">:Zone.Identifier</TargetFilename>
+    </FileDeleteDetected>
+  </EventFiltering>
+</Sysmon>

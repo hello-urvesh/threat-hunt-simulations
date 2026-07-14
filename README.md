@@ -5,3 +5,4 @@ Hands-on, ATT&CK-aligned simulations for generating endpoint telemetry that can 
 ## Simulation modules
 
 - `simulations/windows/amsi-defense-evasion`: PowerShell AMSI bypass and tampering simulations using Atomic Red Team compatible YAML.
+- `simulations/windows/mark-of-the-web-hunting`: Mark of the Web telemetry, bypass, correlation, Sigma, Sysmon, SIEM queries, and synthetic logs.

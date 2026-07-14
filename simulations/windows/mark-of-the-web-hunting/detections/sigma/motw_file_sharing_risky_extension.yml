@@ -1,0 +1,32 @@
+title: Risky File Extension Downloaded From a File Sharing Service
+id: 7dbdcfcc-49cf-4793-9bb3-e66c7928dc91
+status: experimental
+description: Detects MOTW metadata for risky file types delivered from common file sharing or collaboration services.
+references:
+    - https://www.paloaltonetworks.com/blog/security-operations/threat-hunting-with-mark-of-the-web-using-cortex-xdr/
+author: ThreatHuntSim
+date: 2026-07-14
+tags:
+    - attack.command-and-control
+    - attack.t1105
+logsource:
+    product: windows
+    category: create_stream_hash
+detection:
+    selection_stream:
+        TargetFilename|endswith: ':Zone.Identifier'
+    selection_service:
+        Contents|contains:
+            - 'cdn.discordapp.com/'
+            - 'discord.com/'
+            - 'dropbox.com/'
+            - 'drive.google.com/'
+            - 'mega.nz/'
+            - 'onedrive.live.com/'
+            - 'wetransfer.com/'
+    selection_extension:
+        TargetFilename|re: '(?i)\.(?:exe|dll|scr|cmd|bat|ps1|js|jse|vbs|vbe|wsf|hta|lnk|iso|img|vhd|vhdx|msi|jar):Zone\.Identifier$'
+    condition: all of selection_*
+falsepositives:
+    - Legitimate software, scripts, and disk images shared through approved collaboration platforms
+level: medium

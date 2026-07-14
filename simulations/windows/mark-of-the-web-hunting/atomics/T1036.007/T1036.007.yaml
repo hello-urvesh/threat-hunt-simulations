@@ -1,0 +1,35 @@
+attack_technique: T1036.007
+display_name: 'Masquerading: Double File Extension'
+atomic_tests:
+- name: Create marked double extension command file
+  auto_generated_guid: ffc8bfb6-f58f-44cb-bd40-1a680e850a5c
+  description: |
+    Creates a harmless command file named Quarterly_Report.pdf.cmd and applies a Zone.Identifier stream.
+    This generates file creation and MOTW telemetry for double extension hunting.
+  supported_platforms:
+  - windows
+  input_arguments:
+    file_path:
+      description: Double extension file path.
+      type: path
+      default: '%TEMP%\motw-lab\double-extension\Quarterly_Report.pdf.cmd'
+    marker_path:
+      description: Marker written only if the file is executed later.
+      type: path
+      default: '%TEMP%\motw-lab\double-extension\execution-marker.txt'
+  executor:
+    command: |
+      $path = [Environment]::ExpandEnvironmentVariables('#{file_path}')
+      $marker = [Environment]::ExpandEnvironmentVariables('#{marker_path}')
+      New-Item -ItemType Directory -Path (Split-Path -Parent $path) -Force | Out-Null
+      $command = '@echo MOTW_DOUBLE_EXTENSION_SAFE_MARKER>' + '"' + $marker + '"'
+      Set-Content -LiteralPath $path -Value $command -Encoding ASCII
+      $zone = @('[ZoneTransfer]','ZoneId=3','ReferrerUrl=https://files.example.test/share','HostUrl=https://cdn.discordapp.com/attachments/lab/Quarterly_Report.pdf.cmd') -join [Environment]::NewLine
+      Set-Content -LiteralPath $path -Stream Zone.Identifier -Value $zone -Encoding ASCII
+      Get-Item -LiteralPath $path -Stream *
+    cleanup_command: |
+      $path = [Environment]::ExpandEnvironmentVariables('#{file_path}')
+      $marker = [Environment]::ExpandEnvironmentVariables('#{marker_path}')
+      Remove-Item -LiteralPath $path,$marker -Force -ErrorAction SilentlyContinue
+    name: powershell
+    elevation_required: false

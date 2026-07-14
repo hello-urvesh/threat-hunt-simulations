@@ -1,0 +1,26 @@
+# Base extraction from Sysmon Event ID 15
+index=windows sourcetype="XmlWinEventLog:Microsoft-Windows-Sysmon/Operational" EventCode=15 TargetFilename="*:Zone.Identifier"
+| rex field=Contents "(?im)^ZoneId=(?<motw_zone_id>\d+)\s*$"
+| rex field=Contents "(?im)^HostUrl=(?<motw_host_url>.+?)\s*$"
+| rex field=Contents "(?im)^ReferrerUrl=(?<motw_referrer_url>.+?)\s*$"
+| rex field=motw_host_url "(?i)^(?:https?|ftp|file)://(?<motw_host>[^/:]+)"
+| table _time host user Image TargetFilename motw_zone_id motw_host motw_host_url motw_referrer_url Contents
+
+# Direct IP HostUrl
+index=windows sourcetype="XmlWinEventLog:Microsoft-Windows-Sysmon/Operational" EventCode=15 TargetFilename="*:Zone.Identifier"
+| rex field=Contents "(?im)^HostUrl=(?<motw_host_url>.+?)\s*$"
+| rex field=motw_host_url "(?i)^(?:https?|ftp)://(?<motw_host>[^/:]+)"
+| where cidrmatch("0.0.0.0/0", motw_host)
+| where NOT cidrmatch("10.0.0.0/8", motw_host) AND NOT cidrmatch("127.0.0.0/8", motw_host) AND NOT cidrmatch("169.254.0.0/16", motw_host) AND NOT cidrmatch("172.16.0.0/12", motw_host) AND NOT cidrmatch("192.168.0.0/16", motw_host)
+| stats count values(TargetFilename) values(Image) by host user motw_host motw_host_url
+
+# Double extension
+index=windows sourcetype="XmlWinEventLog:Microsoft-Windows-Sysmon/Operational" EventCode=15 TargetFilename="*:Zone.Identifier"
+| regex TargetFilename="(?i)\.(pdf|docx?|xlsx?|pptx?|rtf|txt|jpg|jpeg|png|gif)\.(exe|dll|scr|cmd|bat|ps1|js|jse|vbs|vbe|wsf|hta|lnk|msi):Zone\.Identifier$"
+| table _time host user Image TargetFilename Contents
+
+# ZoneId downgrade
+index=windows sourcetype="XmlWinEventLog:Microsoft-Windows-Sysmon/Operational" EventCode=15 TargetFilename="*:Zone.Identifier"
+| rex field=Contents "(?im)^ZoneId=(?<motw_zone_id>\d+)\s*$"
+| where motw_zone_id IN (0,1,2)
+| table _time host user Image TargetFilename motw_zone_id Contents
